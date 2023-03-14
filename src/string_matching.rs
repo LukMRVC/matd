@@ -63,9 +63,10 @@ fn build_dfa(alphabet: &[char], pattern: &str) -> Vec<Vec<usize>> {
     dfa
 }
 
-pub fn match_dfa(text: &str, pattern: &str, alphabet: &[char]) -> Vec<usize> {
+pub fn match_dfa(text: &str, pattern: &str) -> Vec<usize> {
+    let alphabet: Vec<char> = Vec::from_iter(HashSet::<char>::from_iter(text.chars().into_iter()));
     let mut indices: Vec<usize> = vec![];
-    let dfa = build_dfa(alphabet, pattern);
+    let dfa = build_dfa(&alphabet, pattern);
     let mut char_alphabet_indexes = [0; 255];
     for (ai, a) in alphabet.iter().enumerate() {
         char_alphabet_indexes[*a as usize] = ai;
@@ -174,8 +175,6 @@ pub fn match_bmh(text: &str, pattern: &str) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::hash_map::RandomState;
-
     use super::*;
 
     #[test]
@@ -208,15 +207,12 @@ mod tests {
     fn dfa_is_fine() {
         let text = "GCATCGCAGAGAGTATACAGTACG".to_owned();
         let pattern = "GCAGAGAG".to_owned();
-        let alphabet = ['A', 'C', 'G', 'T'];
-        let res = match_dfa(&text, &pattern, &alphabet);
+        let res = match_dfa(&text, &pattern);
         assert_eq!(res, vec![5]);
 
         let text = "Hawaii has some nice beaches and pineapples".to_owned();
         let pattern = "pine".to_owned();
-        let alphabet: Vec<char> =
-            Vec::from_iter(HashSet::<char>::from_iter(text.chars().into_iter()));
-        let res = match_dfa(&text, &pattern, &alphabet);
+        let res = match_dfa(&text, &pattern);
         assert_eq!(res, vec![33]);
     }
 }
