@@ -21,11 +21,7 @@ pub fn match_ndfa(text: &str, pattern: &str, max_errors: usize) -> bool {
             return true;
         }
 
-        if pix >= pattern_len || aix >= text_chars.len() {
-            continue;
-        }
-
-        if text_chars[aix] == pattern_chars[pix] {
+        if aix < text_chars.len() && pix < pattern_len && text_chars[aix] == pattern_chars[pix] {
             configs.push((state + 1, aix + 1, pix + 1, errors));
         } else if errors < max_errors {
             // char replace
@@ -63,6 +59,12 @@ mod tests {
     fn ndfa_bad_match() {
         let _match = match_ndfa("karel", "dale", 2);
         assert_eq!(_match, false, "False positive match");
+    }
+
+    #[test]
+    fn ndfa_bad_match_2() {
+        let _match = match_ndfa("dale", "karel", 3);
+        assert_eq!(_match, true, "False positive match");
     }
 
     #[test]
