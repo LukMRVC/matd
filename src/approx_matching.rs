@@ -16,24 +16,24 @@ pub fn match_ndfa(text: &str, pattern: &str, max_errors: usize) -> bool {
     // - posun obou pozic
     let pattern_len = pattern.len();
     while let Some((state, aix, pix, errors)) = configs.pop() {
-        if state % (pattern_len + 1) == 0 {
+        if state % (pattern_len + 1) == 0 && aix == text.len() {
             // indices.push(state);
             return true;
         }
 
-        if pix >= text_chars.len() || aix >= pattern_len {
+        if pix >= pattern_len || aix >= text_chars.len() {
             continue;
         }
 
-        if text_chars[pix] == pattern_chars[aix] {
+        if text_chars[aix] == pattern_chars[pix] {
             configs.push((state + 1, aix + 1, pix + 1, errors));
         } else if errors < max_errors {
             // char replace
             configs.push((state + pattern_len + 2, aix + 1, pix + 1, errors + 1));
             // empty char - insertion
-            configs.push((state + pattern_len + 2, aix + 1, pix, errors + 1));
+            configs.push((state + pattern_len + 2, aix, pix + 1, errors + 1));
             // char deletion
-            configs.push((state + pattern_len + 1, aix, pix + 1, errors + 1));
+            configs.push((state + pattern_len + 1, aix + 1, pix, errors + 1));
         }
     }
 
@@ -57,6 +57,12 @@ mod tests {
 
         let res = match_ndfa("survey", "murfxy", 2);
         assert_eq!(res, false);
+    }
+
+    #[test]
+    fn ndfa_bad_match() {
+        let _match = match_ndfa("karel", "dale", 2);
+        assert_eq!(_match, false, "False positive match");
     }
 
     #[test]
