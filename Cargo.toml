@@ -10,3 +10,9 @@ protocol = "sparse"
 
 [dependencies]
 rand = "0.8.5"
+rayon = "1.7.0"
+simdutf8 = "0.1.4"
+stop-words = "0.7.0"
+
+[dependencies.stem]
+git = "https://github.com/minhnhdo/rust-stem"

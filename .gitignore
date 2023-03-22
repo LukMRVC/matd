@@ -1,2 +1,6 @@
 /target
 data/
+
+venv/
+
+gutenberg-download.py

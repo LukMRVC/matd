@@ -1,11 +1,36 @@
 mod approx_matching;
+mod preprocessing;
 mod string_matching;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::io::{BufReader, Read};
 
 use rand::Rng;
 
 fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    // run_string_matching()
+    run_preprocessing()
+}
+
+fn benchmark_pattern_search(
+    text: &str,
+    patterns: &[String],
+    func: &impl Fn(&str, &str) -> Vec<usize>,
+    method: &str,
+) {
+    let start = std::time::Instant::now();
+    for (i, pat) in patterns.iter().enumerate() {
+        func(&text, pat);
+        println!("{i}")
+    }
+    println!(
+        "{method} matching done in {}ms",
+        start.elapsed().as_millis()
+    );
+    let avg = start.elapsed().as_millis() as f32 / patterns.len() as f32;
+    println!("AVG {avg}ms per query");
+}
+
+fn run_string_matching() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let text = "GCATCGCAGCAGCTATACAGCAGAGAGGTACG".to_owned();
     let pattern = "GCAGC".to_owned();
 
@@ -47,7 +72,7 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         //     &string_matching::match_stupid,
         //     "Stupid",
         // );
-        // benchmark_pattern_search(&text, &pattern_words, &string_matching::match_dfa, "DFA");
+        benchmark_pattern_search(&text, &pattern_words, &string_matching::match_dfa, "DFA");
         benchmark_pattern_search(&text, &pattern_words, &string_matching::match_kmp, "KMP");
         benchmark_pattern_search(&text, &pattern_words, &string_matching::match_bmh, "BMH");
     }
@@ -84,21 +109,15 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn benchmark_pattern_search(
-    text: &str,
-    patterns: &[String],
-    func: &impl Fn(&str, &str) -> Vec<usize>,
-    method: &str,
-) {
-    let start = std::time::Instant::now();
-    for (i, pat) in patterns.iter().enumerate() {
-        func(&text, pat);
-        println!("{i}")
+fn run_preprocessing() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let paths = read_dir("data/gutenberg")?;
+
+    for path in paths {
+        let path = path?;
+        if path.file_type()?.is_file() {
+            preprocessing::process(&path.path())?;
+        }
     }
-    println!(
-        "{method} matching done in {}ms",
-        start.elapsed().as_millis()
-    );
-    let avg = start.elapsed().as_millis() as f32 / patterns.len() as f32;
-    println!("AVG {avg}ms per query");
+
+    Ok(())
 }
