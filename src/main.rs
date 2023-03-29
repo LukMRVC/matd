@@ -1,14 +1,75 @@
 mod approx_matching;
+mod indexing;
 mod preprocessing;
 mod string_matching;
+use std::collections::btree_set::Intersection;
 use std::fs::{read_dir, File};
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 
+use indexing::{append_to_index, create_index, IndexListing};
 use rand::Rng;
 
 fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     // run_string_matching()
-    run_preprocessing()
+    // run_preprocessing()
+    let mut ivx = create_index();
+    let filepaths = preprocessing::read_dir_files("data/processed")?;
+    let mut doc_mapping: Vec<String> = vec![];
+    let start = std::time::Instant::now();
+    for (doc_id, file) in filepaths.iter().enumerate() {
+        doc_mapping.push(file.file_name().unwrap().to_str().unwrap().to_owned());
+        let file = File::open(file)?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader
+            .lines()
+            .map(|l| l.expect("Could not parse line!"))
+            .collect();
+        ivx = append_to_index(ivx, &lines, doc_id);
+    }
+    println!("Index built in {}ms", start.elapsed().as_millis());
+
+    let words = vec![
+        "johnston".to_owned(),
+        "historian".to_owned(),
+        "ebook".to_owned(),
+    ];
+
+    let listings: Vec<Option<&IndexListing>> = words
+        .iter()
+        .map(|w| ivx.get(w))
+        .filter(|opt| opt.is_some())
+        .collect();
+    // dbg!(&listings);
+    let start = std::time::Instant::now();
+    let mut result: Option<IndexListing> = None;
+    for listing in listings.iter() {
+        let set = listing.unwrap();
+        if let Some(intersection) = result {
+            result = Some(intersection.intersection(set).cloned().collect());
+        } else {
+            result = Some(set.clone());
+        }
+    }
+    // println!("Querying in order took {}s", start.elapsed().as_nanos());
+
+    // let mut result: Option<IndexListing> = None;
+    // let start = std::time::Instant::now();
+    // let mut result: Option<IndexListing> = None;
+    // for listing in listings.iter().rev() {
+    //     let set = listing.unwrap();
+    //     if let Some(intersection) = result {
+    //         result = Some(intersection.intersection(set).cloned().collect());
+    //     } else {
+    //         result = Some(set.clone());
+    //     }
+    // }
+    // println!(
+    //     "Querying in REVERSE order took {}s",
+    //     start.elapsed().as_nanos()
+    // );
+
+    dbg!(result.unwrap());
+    Ok(())
 }
 
 fn benchmark_pattern_search(

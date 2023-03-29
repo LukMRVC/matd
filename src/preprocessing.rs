@@ -1,5 +1,7 @@
 use simdutf8::basic::from_utf8;
+use std::fs::read_dir;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::PathBuf;
 use std::{fs::File, fs::OpenOptions, path::Path};
 
 const BIG_ALPHA_RANGE: std::ops::RangeInclusive<u8> = 65..=90;
@@ -50,4 +52,19 @@ pub fn process(filepath: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn read_dir_files(
+    dirpath: &str,
+) -> Result<(Vec<PathBuf>), std::boxed::Box<dyn std::error::Error>> {
+    let paths = read_dir(dirpath)?;
+    let mut files = vec![];
+    for path in paths {
+        let path = path?;
+        if path.file_type()?.is_file() {
+            files.push(path.path());
+        }
+    }
+
+    Ok(files)
 }
