@@ -8,6 +8,11 @@ const BIG_ALPHA_RANGE: std::ops::RangeInclusive<u8> = 65..=90;
 const SMALL_ALPHA_RANGE: std::ops::RangeInclusive<u8> = 97..=122;
 const NUM_RANGE: std::ops::RangeInclusive<u8> = 48..=57;
 
+pub fn get_stop_words() -> Vec<String> {
+    // Get the stop words
+    return stop_words::get(stop_words::LANGUAGE::English);
+}
+
 pub fn process(filepath: &Path) -> std::io::Result<()> {
     let file = File::open(filepath)?;
     let mut reader = BufReader::new(file);
@@ -31,7 +36,7 @@ pub fn process(filepath: &Path) -> std::io::Result<()> {
     let words = words.split_ascii_whitespace();
 
     // Get the stop words
-    let eng_stop_words = stop_words::get(stop_words::LANGUAGE::English);
+    let eng_stop_words = get_stop_words();
     let eng_stop_words: Vec<&str> = eng_stop_words.iter().map(|sw| sw.as_str()).collect();
 
     let ofpn = format!(

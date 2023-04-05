@@ -2,56 +2,104 @@ mod approx_matching;
 mod indexing;
 mod preprocessing;
 mod string_matching;
-use std::collections::btree_set::Intersection;
+use rayon::prelude::*;
+use std::collections::HashMap;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader, Read};
 
 use indexing::{append_to_index, create_index, IndexListing};
 use rand::Rng;
 
+use crate::preprocessing::get_stop_words;
+
 fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    // run_string_matching()
-    // run_preprocessing()
-    let mut ivx = create_index();
     let filepaths = preprocessing::read_dir_files("data/processed")?;
+
+    let doc_count = filepaths.len();
     let mut doc_mapping: Vec<String> = vec![];
-    let start = std::time::Instant::now();
+    let mut term_freq: Vec<Vec<u32>> = vec![];
+    let mut term_idx_map: HashMap<String, usize> = HashMap::default();
+    println!("Please enter your query: ");
+    let mut queryinput: String = String::new();
+    std::io::stdin().read_line(&mut queryinput)?;
+
+    // let start = std::time::Instant::now();
     for (doc_id, file) in filepaths.iter().enumerate() {
         doc_mapping.push(file.file_name().unwrap().to_str().unwrap().to_owned());
+        println!("{doc_id}: {}", doc_mapping.last().unwrap());
         let file = File::open(file)?;
         let reader = BufReader::new(file);
-        let lines: Vec<String> = reader
+        let terms: Vec<String> = reader
             .lines()
             .map(|l| l.expect("Could not parse line!"))
             .collect();
-        ivx = append_to_index(ivx, &lines, doc_id);
-    }
-    println!("Index built in {}ms", start.elapsed().as_millis());
 
-    let words = vec![
-        "johnston".to_owned(),
-        "historian".to_owned(),
-        "ebook".to_owned(),
-    ];
-
-    let listings: Vec<Option<&IndexListing>> = words
-        .iter()
-        .map(|w| ivx.get(w))
-        .filter(|opt| opt.is_some())
-        .collect();
-    // dbg!(&listings);
-    let start = std::time::Instant::now();
-    let mut result: Option<IndexListing> = None;
-    for listing in listings.iter() {
-        let set = listing.unwrap();
-        if let Some(intersection) = result {
-            result = Some(intersection.intersection(set).cloned().collect());
-        } else {
-            result = Some(set.clone());
+        for term in terms.iter() {
+            if let Some(term_idx) = term_idx_map.get(term) {
+                term_freq[*term_idx][doc_id] += 1;
+            } else {
+                term_freq.push(vec![0; doc_count]);
+                let term_idx = term_freq.len() - 1;
+                term_idx_map.insert(term.clone(), term_idx);
+                term_freq[term_idx][doc_id] = 1;
+            }
         }
     }
 
-    dbg!(result.unwrap());
+    // let start = std::time::Instant::now();
+    let inverse_doc_freq: Vec<f32> = term_freq
+        .par_iter()
+        .map(|documents_freq| {
+            let docs_containing_term = documents_freq
+                .iter()
+                .filter(|occurences| **occurences > 0)
+                .count();
+            (doc_count as f32 / docs_containing_term as f32).log10()
+        })
+        .collect();
+
+    // println!(
+    //     "Building inverse doc freq took: {}ms",
+    //     start.elapsed().as_millis()
+    // );
+
+    let tf_idf: Vec<Vec<f32>> = term_freq
+        .par_iter()
+        .enumerate()
+        .map(|(term_id, documents_freq)| {
+            documents_freq
+                .iter()
+                .map(|doc_freq| (*doc_freq as f32) * inverse_doc_freq[term_id])
+                .collect::<Vec<f32>>()
+        })
+        .collect();
+
+    let stopwords = get_stop_words();
+    let stopwords: Vec<&str> = stopwords.iter().map(|sw| sw.as_str()).collect();
+
+    let query_terms: Vec<String> = queryinput
+        .split_ascii_whitespace()
+        .filter(|term| !stopwords.contains(term))
+        .map(|term| stem::get(term).unwrap())
+        .collect();
+    dbg!(&query_terms);
+    // scores is a vector of scores per document, tuple of (document_id, score)
+    let mut scores: Vec<(usize, f32)> = vec![];
+    for doc_id in 0..doc_count {
+        let mut score = 0f32;
+        for qt in query_terms.iter() {
+            if let Some(term_id) = term_idx_map.get(qt) {
+                score += tf_idf[*term_id][doc_id];
+            }
+        }
+        scores.push((doc_id, score));
+    }
+    scores.sort_by(|(_, s1), (_, s2)| s1.partial_cmp(s2).unwrap());
+    println!("Highest scores docuemnts: ");
+    for (doc_id, score) in scores.iter().rev().take(10) {
+        println!("{doc_id}: {score}");
+    }
+
     Ok(())
 }
 
@@ -163,5 +211,49 @@ fn run_preprocessing() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         }
     }
 
+    Ok(())
+}
+
+fn run_inverted_index_matching() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut ivx = create_index();
+    let filepaths = preprocessing::read_dir_files("data/processed")?;
+    let mut doc_mapping: Vec<String> = vec![];
+    let start = std::time::Instant::now();
+    for (doc_id, file) in filepaths.iter().enumerate() {
+        doc_mapping.push(file.file_name().unwrap().to_str().unwrap().to_owned());
+        let file = File::open(file)?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader
+            .lines()
+            .map(|l| l.expect("Could not parse line!"))
+            .collect();
+        ivx = append_to_index(ivx, &lines, doc_id);
+    }
+    println!("Index built in {}ms", start.elapsed().as_millis());
+
+    let words = vec![
+        "johnston".to_owned(),
+        "historian".to_owned(),
+        "ebook".to_owned(),
+    ];
+
+    let listings: Vec<Option<&IndexListing>> = words
+        .iter()
+        .map(|w| ivx.get(w))
+        .filter(|opt| opt.is_some())
+        .collect();
+    // dbg!(&listings);
+    let start = std::time::Instant::now();
+    let mut result: Option<IndexListing> = None;
+    for listing in listings.iter() {
+        let set = listing.unwrap();
+        if let Some(intersection) = result {
+            result = Some(intersection.intersection(set).cloned().collect());
+        } else {
+            result = Some(set.clone());
+        }
+    }
+
+    dbg!(result.unwrap());
     Ok(())
 }
