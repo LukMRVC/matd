@@ -50,23 +50,6 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
             result = Some(set.clone());
         }
     }
-    // println!("Querying in order took {}s", start.elapsed().as_nanos());
-
-    // let mut result: Option<IndexListing> = None;
-    // let start = std::time::Instant::now();
-    // let mut result: Option<IndexListing> = None;
-    // for listing in listings.iter().rev() {
-    //     let set = listing.unwrap();
-    //     if let Some(intersection) = result {
-    //         result = Some(intersection.intersection(set).cloned().collect());
-    //     } else {
-    //         result = Some(set.clone());
-    //     }
-    // }
-    // println!(
-    //     "Querying in REVERSE order took {}s",
-    //     start.elapsed().as_nanos()
-    // );
 
     dbg!(result.unwrap());
     Ok(())
