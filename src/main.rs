@@ -26,13 +26,16 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     // let start = std::time::Instant::now();
     for (doc_id, file) in filepaths.iter().enumerate() {
         doc_mapping.push(file.file_name().unwrap().to_str().unwrap().to_owned());
-        println!("{doc_id}: {}", doc_mapping.last().unwrap());
+        // println!("{doc_id}: {}", doc_mapping.last().unwrap());
         let file = File::open(file)?;
         let reader = BufReader::new(file);
         let terms: Vec<String> = reader
             .lines()
             .map(|l| l.expect("Could not parse line!"))
             .collect();
+
+        // column represents a document
+        // row represents a word
 
         for term in terms.iter() {
             if let Some(term_idx) = term_idx_map.get(term) {
@@ -58,11 +61,6 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         })
         .collect();
 
-    // println!(
-    //     "Building inverse doc freq took: {}ms",
-    //     start.elapsed().as_millis()
-    // );
-
     let tf_idf: Vec<Vec<f32>> = term_freq
         .par_iter()
         .enumerate()
@@ -73,6 +71,113 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
                 .collect::<Vec<f32>>()
         })
         .collect();
+
+    fn dot_product(v1: &Vec<f32>, v2: &Vec<f32>) -> f32 {
+        v1.iter().zip(v2.iter()).map(|(f1, f2)| f1 * f2).sum()
+    }
+
+    fn normalize(v1: &Vec<f32>) -> Vec<f32> {
+        let magnitude = v1.iter().fold(0f32, |acc, f| acc + (f * f));
+        if magnitude.eq(&0f32) {
+            return v1.clone();
+        }
+        v1.iter().map(|f| f / magnitude).collect()
+    }
+
+    fn normalize_u32(v1: &Vec<u32>) -> Vec<f32> {
+        let magnitude = v1.iter().fold(0f32, |acc, f| acc + (f * f) as f32);
+        if magnitude.eq(&0f32) {
+            return v1.iter().map(|f| *f as f32).collect();
+        }
+        v1.iter().map(|f| *f as f32 / magnitude).collect()
+    }
+
+    fn vector_similiarity(
+        vec: &Vec<Vec<f32>>,
+        doc_mapping: &Vec<String>,
+        collection_name: String,
+        doc_or_word: String,
+        term_idx_map: &HashMap<String, usize>,
+    ) {
+        for (norm_id, norm_doc) in vec.iter().enumerate().take(150) {
+            let most_sim_doc = vec
+                .iter()
+                .enumerate()
+                .filter(|(id, _)| *id != norm_id)
+                .map(|(id, doc)| (id, dot_product(norm_doc, doc)))
+                .max_by(|x, y| x.1.partial_cmp(&y.1).unwrap());
+            if let Some((doc_id, similiarity)) = most_sim_doc {
+                if (doc_or_word.eq_ignore_ascii_case("document")) {
+                    println!(
+                        "{collection_name}: {f1} most similiar document is {f2} with score {similiarity}",
+                        f1 = doc_mapping[norm_id],
+                        f2 = doc_mapping[doc_id]
+                    );
+                } else {
+                    let kv = term_idx_map
+                        .iter()
+                        .find(|(_, word_id)| **word_id == norm_id);
+                    let w2 = term_idx_map.iter().find(|(_, word_id)| **word_id == doc_id);
+                    println!(
+                        "{collection_name}: {f1} most similiar word is {f2} with score {similiarity}",
+                        f1 = kv.unwrap().0,
+                        f2 = w2.unwrap().0
+                    );
+                }
+            } else {
+                panic!("No similiarity was found!");
+            }
+        }
+    }
+
+    let tf_row_norm: Vec<Vec<f32>> = term_freq.iter().map(normalize_u32).collect();
+    let total_doc_count = term_freq[0].len();
+    let mut tf_col_norm: Vec<Vec<f32>> = vec![];
+    let mut tfidf_col_norm: Vec<Vec<f32>> = vec![];
+    let tfidf_row_norm: Vec<Vec<f32>> = tf_idf.iter().map(normalize).collect();
+
+    for col in 0..total_doc_count {
+        let mut col_vec: Vec<u32> = vec![];
+        let mut col_vec_idf: Vec<f32> = vec![];
+        for row in 0..term_freq.len() {
+            col_vec.push(term_freq[row][col].clone());
+            col_vec_idf.push(tf_idf[row][col].clone());
+        }
+        tf_col_norm.push(normalize_u32(&col_vec));
+        tfidf_col_norm.push(normalize(&col_vec_idf));
+    }
+
+    vector_similiarity(
+        &tfidf_col_norm,
+        &doc_mapping,
+        "TFIDF".to_owned(),
+        "document".to_owned(),
+        &term_idx_map,
+    );
+
+    vector_similiarity(
+        &tf_col_norm,
+        &doc_mapping,
+        "TF".to_owned(),
+        "document".to_owned(),
+        &term_idx_map,
+    );
+
+    vector_similiarity(
+        &tfidf_row_norm,
+        &doc_mapping,
+        "TFIDF".to_owned(),
+        "word".to_owned(),
+        &term_idx_map,
+    );
+
+    vector_similiarity(
+        &tf_row_norm,
+        &doc_mapping,
+        "TF".to_owned(),
+        "word".to_owned(),
+        &term_idx_map,
+    );
 
     let stopwords = get_stop_words();
     let stopwords: Vec<&str> = stopwords.iter().map(|sw| sw.as_str()).collect();
@@ -97,7 +202,10 @@ fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     scores.sort_by(|(_, s1), (_, s2)| s1.partial_cmp(s2).unwrap());
     println!("Highest scores docuemnts: ");
     for (doc_id, score) in scores.iter().rev().take(10) {
-        println!("{doc_id}: {score}");
+        println!(
+            "Document {doc_id} - {filename}: {score}",
+            filename = doc_mapping[*doc_id]
+        );
     }
 
     Ok(())
