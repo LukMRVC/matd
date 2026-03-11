@@ -11,7 +11,7 @@ use indexing::{append_to_index, create_index, IndexListing};
 use rand::Rng;
 
 use crate::preprocessing::get_stop_words;
-
+// this comment is from a browser based repo
 fn main() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let filepaths = preprocessing::read_dir_files("data/processed")?;
 
